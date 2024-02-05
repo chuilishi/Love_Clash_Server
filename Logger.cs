@@ -8,19 +8,27 @@ public class Logger
     public static FileStream fileStream;
     public Logger()
     {
-        //open Log.txt in current directory as a filestream
-        string path = Path.Combine(Directory.GetCurrentDirectory(), "Log.txt");
-        fileStream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite);
-        
+        if (!Directory.Exists(Path.Combine(Directory.GetCurrentDirectory(), "logs")))
+        {
+            Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "logs"));
+        }
+        string path = "";
+        while (true)
+        {
+            int logCount = 0;
+            path = Path.Combine(Directory.GetCurrentDirectory(), "logs", "log_" + logCount + ".txt");
+            if (Path.Exists(path))break;
+            logCount++;
+        }
+        fileStream = new FileStream(path,FileMode.OpenOrCreate);
     }
     public static void Log(string value)
     {
         value += "\n";
-        var bytes = Encoding.ASCII.GetBytes(value);
+        var bytes = Encoding.UTF8.GetBytes(value);
         fileStream.WriteAsync(bytes,0,bytes.Length).GetAwaiter().OnCompleted((() =>
         {
             fileStream.Flush();
         }));
-        Console.WriteLine(value);
     }
 }

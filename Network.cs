@@ -15,13 +15,11 @@ public class Network()
     public static TcpListener receiverListener;
     public static TcpListener senderListener;
     public static Logger logger = new Logger();
-    public Dictionary<int, Room> rooms = new Dictionary<int, Room>();
+    public static Dictionary<int, Room> rooms = new Dictionary<int, Room>();
     public static JsonSerializerSettings jsonSetting = new JsonSerializerSettings
     {
         // NullValueHandling = NullValueHandling.Ignore
-        
     };
-    
     public async Task Start(){
         receiverListener = new TcpListener(new IPEndPoint(IPAddress.Parse(ipaddress),receiverPort));
         senderListener = new TcpListener(new IPEndPoint(IPAddress.Parse(ipaddress),senderPort));
@@ -30,7 +28,6 @@ public class Network()
         //prevent the program to exit
         Console.ReadLine();
     }
-
     public async Task Listener(TcpListener listener,ClientType clientType)
     {
         listener.Start();
@@ -45,15 +42,7 @@ public class Network()
         try
         {
             #region 首次连接
-            var stream = client.GetStream();
-            byte[] buffer = new byte[4096];
-            int contentSize = await stream.ReadAsync(buffer,0,buffer.Length);
-            Logger.Log("连接成功");
-            var formatted = new byte[contentSize];
-            Array.Copy(buffer,formatted,contentSize);
-            var s = Encoding.ASCII.GetString(formatted);
-            Logger.Log(s);
-            Logger.Log(s);
+            string s = await NetworkUtility.ReadAsync(client);
             var operation = JsonConvert.DeserializeObject<Operation>(s,jsonSetting);
             //尝试连接
             if (operation.operationType == OperationType.TryConnectRoom)

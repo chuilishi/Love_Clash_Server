@@ -12,33 +12,47 @@ public class Room
     public TcpClient client2Sender;
     public TcpClient client2Receiver;
     public int roomId;
-    public int objectCount = 0;
+    //0是Player1,1是Player2
+    public int objectCount = 2;
     public Room(int roomId)
     {
         this.roomId = roomId;
     }
+    
+    private async Task MessageHandler(Operation operation)
+    {
+        if (operation.playerEnum == PlayerEnum.Player1)
+        {
+            await NetworkUtility.BroadCast(operation,client1Sender,client2Receiver);
+        }
+        else
+        {
+            await NetworkUtility.BroadCast(operation,client2Sender,client1Receiver);
+        }
+    }
+
+    #region Room基本设施
+
     public void AddPlayer(TcpClient client,ClientType clientType)
     {
+        string s = "";
         if (clientType == ClientType.Sender)
         {
             if (client1Sender == null)
             {
                 client1Sender = client;
-                string s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
+                s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
                     playerEnum: PlayerEnum.Player1, extraMessage: roomId.ToString()),Network.jsonSetting);
-                client.GetStream().Write(Encoding.ASCII.GetBytes(s));
             }
             else if (client2Sender == null)
             {
                 client2Sender = client;
-                string s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
+                s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
                     playerEnum: PlayerEnum.Player2, extraMessage: roomId.ToString()),Network.jsonSetting);
-                client.GetStream().Write(Encoding.ASCII.GetBytes(s));
             }
             else
             {
-                string s = JsonConvert.SerializeObject(new Operation(OperationType.Error),Network.jsonSetting);
-                client.GetStream().Write(Encoding.ASCII.GetBytes(s));
+                s = JsonConvert.SerializeObject(new Operation(OperationType.Error),Network.jsonSetting);
             }
         }
         else if (clientType == ClientType.Receiver)
@@ -46,105 +60,101 @@ public class Room
             if (client1Receiver == null)
             {
                 client1Receiver = client;
-                string s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
+                s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
                     playerEnum: PlayerEnum.Player1, extraMessage: roomId.ToString()),Network.jsonSetting);
-                client.GetStream().Write(Encoding.ASCII.GetBytes(s));
             }
             else if (client2Receiver == null)
             {
                 client2Receiver = client;
-                string s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
+                s = JsonConvert.SerializeObject(new Operation(OperationType.TryConnectRoom,
                     playerEnum: PlayerEnum.Player2, extraMessage: roomId.ToString()),Network.jsonSetting);
-                client.GetStream().Write(Encoding.ASCII.GetBytes(s));
             }
             else
             {
-                string s = JsonConvert.SerializeObject(new Operation(OperationType.Error),Network.jsonSetting);
-                client.GetStream().Write(Encoding.ASCII.GetBytes(s));
+                s = JsonConvert.SerializeObject(new Operation(OperationType.Error),Network.jsonSetting);
             }
         }
+        NetworkUtility.WriteAsync(client, Encoding.ASCII.GetBytes(s));
         if (client1Receiver!=null && client1Sender!=null && client2Receiver!=null &&
             client2Sender!=null)
         {
             Start();
         }
     }
-
     public async void Start()
     {
         if(!client1Receiver.Connected||!client1Sender.Connected||!client2Receiver.Connected||!client2Sender.Connected)
             throw new Exception("有玩家未连接");
         //发一个Init代表开始
-        BroadCast(new Operation(OperationType.Init));
+        Console.WriteLine("Start");
+        NetworkUtility.BroadCast(new Operation(OperationType.Init),client1Receiver,client2Receiver);
         //对每个sender回应另一个sender的Init
-        var task1 = ReceiveAsync(client1Sender);
-        var task2 = ReceiveAsync(client2Sender);
+        var task1 = NetworkUtility.ReadAsync(client1Sender);
+        var task2 = NetworkUtility.ReadAsync(client2Sender);
         await Task.WhenAll(task1,task2);
-        client1Sender.GetStream().WriteAsync(Encoding.ASCII.GetBytes(task2.Result));
-        client2Sender.GetStream().WriteAsync(Encoding.ASCII.GetBytes(task1.Result));
-        MessageHandler(client1Sender);
-        MessageHandler(client2Sender);
+        NetworkUtility.WriteAsync(client1Sender,task2.Result);
+        NetworkUtility.WriteAsync(client2Sender,task1.Result);
+        
+        MessageHandler(client1Sender,PlayerEnum.Player1);
+        MessageHandler(client2Sender,PlayerEnum.Player2);
     }
     
-    private static async Task<string> ReceiveAsync(TcpClient client)
-    {
-        var buffer = new byte[4096];
-        client.GetStream().ReadTimeout = 10000;
-        int size = 0;
-        size = await client.GetStream().ReadAsync(buffer,0,buffer.Length);
-        var formatted = new byte[size];
-        Array.Copy(buffer,formatted,size);
-        string s = Encoding.ASCII.GetString(formatted);
-        Logger.Log("收到的消息: "+s);
-        return s;
-    }
-    public void BroadCast(byte[] bytes)
-    {
-        client1Receiver.GetStream().WriteAsync(bytes);
-        client2Receiver.GetStream().WriteAsync(bytes);
-    }
-    public void BroadCast(string s)
-    {
-        BroadCast(Encoding.ASCII.GetBytes(s));
-    }
-    public void BroadCast(Operation operation)
-    {
-        BroadCast(JsonConvert.SerializeObject(operation,Network.jsonSetting));
-    }
-    public async void MessageHandler(TcpClient client)
+    public async Task MessageHandler(TcpClient client,PlayerEnum playerEnum)
     {
         while (true)
         {
-            var resp = await ReceiveAsync(client);
-            Logger.Log("收到的消息: "+resp);
-            var operation = JsonConvert.DeserializeObject<Operation>(resp,Network.jsonSetting);
-            if (operation.operationType == OperationType.CreateObject)
+            try
             {
-                CreateObject(operation);
+                string resp = await NetworkUtility.ReadAsync(client);
+                if (string.IsNullOrEmpty(resp))
+                {
+                    if (playerEnum == PlayerEnum.Player1)
+                    {
+                        Logger.Log("Player1退出");
+                    }
+                    else if (playerEnum == PlayerEnum.Player2)
+                    {
+                        Logger.Log("Player2退出");
+                    }
+                    client1Receiver.Close();
+                    client1Sender.Close();
+                    client2Receiver.Close();
+                    client2Sender.Close();
+                    Network.rooms.Remove(roomId);
+                    break;
+                }
+                Logger.Log("收到的消息: "+resp);
+                Operation operation = JsonConvert.DeserializeObject<Operation>(resp,Network.jsonSetting);
+                MessageHandler(operation);
             }
-            else
+            catch (Exception e)
             {
-                BroadCast(resp);
+                Console.WriteLine(e);
+                throw;
             }
-        };
+        }
     }
     
     private void CreateObject(Operation operation)
     {
         var networkObject = JsonConvert.DeserializeObject<NetworkObject>(operation.baseNetworkObjectJson);
         networkObject.networkId = objectCount;
+        operation.baseNetworkObjectJson = JsonConvert.SerializeObject(networkObject,Network.jsonSetting);
         objectCount++;
         var s = JsonConvert.SerializeObject(operation,Network.jsonSetting);
+        Console.WriteLine("发送的消息: "+s);
         if (operation.playerEnum == PlayerEnum.Player1)
         {
-            client1Sender.GetStream().WriteAsync(Encoding.ASCII.GetBytes(s));
-            client2Receiver.GetStream().WriteAsync(Encoding.ASCII.GetBytes(s));
+            NetworkUtility.WriteAsync(client1Sender,s);
+            NetworkUtility.WriteAsync(client2Receiver,s);
         }
         else if (operation.playerEnum == PlayerEnum.Player2)
         {
-            client2Sender.GetStream().WriteAsync(Encoding.ASCII.GetBytes(s));
-            client1Receiver.GetStream().WriteAsync(Encoding.ASCII.GetBytes(s));
+            NetworkUtility.WriteAsync(client2Sender,s);
+            NetworkUtility.WriteAsync(client1Receiver,s);
         }
     }
+
+    #endregion
     
 }

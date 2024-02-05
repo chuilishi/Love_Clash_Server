@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Script;
 
 namespace loveclash_server.UnityPart;
 
@@ -54,4 +55,9 @@ public enum RequestType
 {
     Request,
     BroadCast
+}
+public class NetworkObject
+{
+    public int networkId = -1;
+    public ObjectEnum objectEnum;
 }
