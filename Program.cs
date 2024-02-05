@@ -12,7 +12,7 @@ public class Program
     static async Task Main()
     {
         var network = new Network();
-        await network.Start();
+        network.Start();
         // FileStream fileStream1 = new FileStream("data_chuilishi",FileMode.Open,FileAccess.ReadWrite);
         // fileStream1.SetLength(0);
         // await NetworkUtility.WriteAsync(fileStream1, Encoding.ASCII.GetBytes("asdfasdf"));

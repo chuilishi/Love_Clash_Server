@@ -9,8 +9,8 @@ using Newtonsoft.Json;
 
 public class Network()
 {
-    public static int receiverPort = 7777;
-    public static int senderPort = 7778;
+    public static int receiverPort = 7788;
+    public static int senderPort = 7799;
     public static string ipaddress = "127.0.0.1";
     public static TcpListener receiverListener;
     public static TcpListener senderListener;
@@ -20,9 +20,12 @@ public class Network()
     {
         // NullValueHandling = NullValueHandling.Ignore
     };
-    public async Task Start(){
-        receiverListener = new TcpListener(new IPEndPoint(IPAddress.Parse(ipaddress),receiverPort));
+    public void Start(){
+        Console.WriteLine("networkStart");
+        receiverListener = new TcpListener(IPAddress.Parse(ipaddress), receiverPort);
+        Console.WriteLine("receiveListener start");
         senderListener = new TcpListener(new IPEndPoint(IPAddress.Parse(ipaddress),senderPort));
+        Console.WriteLine("senderListener start");
         Listener(receiverListener, ClientType.Receiver);
         Listener(senderListener, ClientType.Sender);
         //prevent the program to exit
@@ -30,10 +33,13 @@ public class Network()
     }
     public async Task Listener(TcpListener listener,ClientType clientType)
     {
+        Console.WriteLine("listener start");
         listener.Start();
         while (true)
         {
+            Console.WriteLine("kaishi");
             var client = await listener.AcceptTcpClientAsync();
+            Console.WriteLine("有连接");
             ClientHandler(client,clientType);
         }
     }
